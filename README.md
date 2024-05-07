@@ -12,5 +12,4 @@ Data are stored in Stanford Digital Repository [here](https://doi.org/10.25740/y
 For all datasets, the accompanying codebook (**SFP_Codebook.xlsx**) details each column’s values and their meanings.
 
 ## Scripts
-**tables.Rmd** uses the datasets to generate all of the tables in the paper.
-**figures.Rmd** generates all of the figures in the paper.
+**tables-figures.Rmd** uses the datasets to generate all of the tables and figures in the paper.
