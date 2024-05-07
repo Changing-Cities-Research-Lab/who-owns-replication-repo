@@ -26,6 +26,14 @@ library(data.table)
 library(psych)
 library(plm)
 library(conflicted)
+library(hrbrthemes)
+
+# Maps Packages:
+library(patchwork) # For combining plots
+library(scales)
+library(sf)
+library(ggmap)
+library(tigris)
 
 ```
 
@@ -213,4 +221,255 @@ table5 <- stargazer(m1,
           star.cutoffs = c(0.05, 0.01, 0.001))
 
 ```
+
+# Figures
+
+```{r fig1}
+
+
+
+df_mean <- df %>%
+  filter(!is.na(divergence) & !is.na(year_num)) %>% 
+  group_by(year_num) %>%
+  summarise(mean_div = mean(divergence)) # Calculate year-specific mean to be included in each plot.
+
+df %>% 
+filter(!is.na(divergence) & !is.na(year_num)) %>% 
+  ggplot(aes(x = divergence, group = year_num)) +
+  geom_histogram(aes(y = ..density..), color="black", fill="white",
+                 bins = 50) +
+  geom_density() +
+  geom_vline(data = df_mean, mapping = aes(xintercept = mean_div)) +
+  theme_ipsum() + 
+  theme(
+    axis.title.y = element_text(hjust=0.5, size=18),
+    axis.title.x = element_text(hjust=0.5, size=18),
+  ) +
+  ylab("Density") +
+  xlab("Divergence Score") +
+  facet_wrap(~year_num) +
+  theme(
+    legend.position="none",
+    axis.ticks.x=element_blank(),
+    text=element_text(size=21)
+  ) + 
+  labs(
+    caption = "Vertical lines indicate year-specific mean of divergence."
+  )
+
+
+```
+
+```{r fig2}
+
+# Call in spatial data for SF County
+sf <- tracts(state = "CA", county = "075",
+             cb = TRUE,
+             year = 2010) %>% 
+  mutate(GEOID = paste0(STATE,COUNTY,TRACT))
+
+# Make a separate df for each year
+df90 <- df %>% 
+  filter(year_num==1990) %>% 
+  geo_join(sf, ., "GEOID", "trtid10") %>%  #join with spatial data 
+  st_transform(merged,crs="WGS84") %>% 
+  mutate(divergence = ifelse(is.na(divergence),
+                                   median(divergence, na.rm = TRUE),
+                                   divergence)) 
+
+df00 <- df %>% 
+  filter(year_num==2000) %>% 
+  geo_join(sf, ., "GEOID", "trtid10") %>%  #join with spatial data 
+  st_transform(merged,crs="WGS84") %>% 
+  mutate(divergence = ifelse(is.na(divergence),
+                                   median(divergence, na.rm = TRUE),
+                                   divergence)) 
+
+df12 <- df %>% 
+  filter(year_num==2010) %>% 
+  geo_join(sf, ., "GEOID", "trtid10") %>%  #join with spatial data 
+  st_transform(merged,crs="WGS84") %>% 
+  mutate(divergence = ifelse(is.na(divergence),
+                                   median(divergence, na.rm = TRUE),
+                                   divergence)) 
+
+df17 <- df %>% 
+  filter(year_num==2017) %>% 
+  geo_join(sf, ., "GEOID", "trtid10") %>%  #join with spatial data 
+  st_transform(merged,crs="WGS84") %>% 
+    mutate(divergence = ifelse(is.na(divergence),
+                                   median(divergence, na.rm = TRUE),
+                                   divergence))
+# Make plots:
+p90 <- 
+  ggplot() + 
+  geom_sf(data = df90, aes(fill = divergence), size = 0.01) +
+  scale_fill_distiller(type="seq", trans="reverse", palette = "Reds", 
+                       breaks = c(0.1,0.8), labels = c("Low","High")
+                       ) +
+  theme_nothing(legend=TRUE) +
+  labs(fill="Divergence Score")
+
+p00 <- 
+  ggplot() + 
+  geom_sf(data = df00, aes(fill = divergence), size = 0.01) +
+  scale_fill_distiller(type="seq", trans="reverse", palette = "Reds", 
+                       breaks = c(0.1,0.8), labels = c("Low","High")
+                       ) +
+  theme_nothing(legend=TRUE) +
+  labs(fill="Divergence Score")
+
+p12 <- 
+  ggplot() + 
+  geom_sf(data = df12, aes(fill = divergence), size = 0.01) +
+  scale_fill_distiller(type="seq", trans="reverse", palette = "Reds", 
+                      breaks = c(0.03,0.4), labels = c("Low","High")
+                       ) +
+  theme_nothing(legend=TRUE) +
+  labs(fill="Divergence Score")
+
+p17 <- 
+  ggplot() + 
+  geom_sf(data = df17, aes(fill = divergence), size = 0.01) +
+  scale_fill_distiller(type="seq", trans="reverse", palette = "Reds", 
+                      breaks = c(0.03,0.4), labels = c("Low","High")
+                      ) +
+  theme_nothing(legend=TRUE) +
+  labs(fill="Divergence Score")
+
+combined <- ggpubr::ggarrange(p90,p00,p12,p17, ncol=2, nrow=2, common.legend = TRUE, 
+                              legend = "right",
+                  labels = c("1990",
+                             "2000",
+                             "2012",
+                             "2017"
+                        ))
+
+```
+
+```{r fig3}
+
+# Create interactions of year/race:
+total <- df %>% 
+   select(trtid10,year_num,ends_with("share"),
+         divergence,
+         pnhblk,
+         pnhwht,
+         pasian,
+         phisp) %>% 
+  rename(
+    White_owner = nhwht_share,
+    White_resident = pnhwht,
+    Black_owner = nhblk_share,
+    Black_resident = pnhblk,
+    Asian_owner = asian_share,
+    Asian_resident = pasian,
+    Hispanic_owner = hisp_share,
+    Hispanic_resident = phisp
+  ) %>%
+  select(-other_share) %>%
+  pivot_longer(
+    -c("trtid10","year_num", "divergence"),
+    names_sep = "_",
+    names_to = c("race","type"),
+    values_to = "share"
+  )
+
+total$race_int <- interaction(total$year_num, total$race)
+
+# Define primary and secondary y-axis limits
+ylim.prim <- c(0, 85) 
+ylim.sec <- c(0, 0.9)   
+
+# Calculate slope and intercept for secondary axis transformation
+b <- diff(ylim.prim)/diff(ylim.sec)
+a <- ylim.prim[1] - b*ylim.sec[1] 
+
+# Plot for Fillmore 
+g1 <- total %>% 
+  filter(trtid10=="06075016100") %>% ## Fillmore
+  ungroup() %>% 
+  ggplot(aes(x = factor(race_int,
+                        level = c(
+                          "1990.White", "1990.Asian", "1990.Black", "1990.Hispanic",
+                          "2000.White", "2000.Asian", "2000.Black", "2000.Hispanic",
+                          "2010.White", "2010.Asian", "2010.Black", "2010.Hispanic",
+                          "2017.White", "2017.Asian", "2017.Black", "2017.Hispanic"
+                        )), y = share, fill = factor(type))) +
+  geom_bar(stat = "identity", position = position_dodge()) +
+  geom_line(aes(y = a + divergence*b, group = 1), color = "red") +
+  scale_y_continuous("Share", sec.axis = sec_axis(~ (. - a)/b, name = "Divergence")) +
+  annotate("text", x = 1:16, y = -2, label = rep(c("W", "A", "B", "H"), 4)) +
+  annotate("text", c(2.5, 6.5, 10.5, 14.5), y = -5, label = c("1990","2000","2010","2017")) +
+  theme_minimal() +
+  theme(plot.margin = unit(c(1, 1, 4, 1), "lines"),
+        axis.title.x = element_blank(),
+        axis.text.x = element_blank()) +
+  labs(
+    fill = ""
+  ) +
+  scale_fill_hue(labels = c("Owners", "Residents")) +
+  theme(text=element_text(size=20))
+
+# Plot for South Beach 
+g2 <- total %>% 
+  filter(trtid10=="06075012100") %>% # South Beach
+  ungroup() %>% 
+  ggplot(aes(x = factor(race_int,
+                        level = c(
+                          "1990.White", "1990.Asian", "1990.Black", "1990.Hispanic",
+                          "2000.White", "2000.Asian", "2000.Black", "2000.Hispanic",
+                          "2010.White", "2010.Asian", "2010.Black", "2010.Hispanic",
+                          "2017.White", "2017.Asian", "2017.Black", "2017.Hispanic"
+                        )), y = share, fill = factor(type))) +
+  geom_bar(stat = "identity", position = position_dodge()) +
+  geom_line(aes(y = a + divergence*b, group = 1), color = "red") +
+  scale_y_continuous("Share", sec.axis = sec_axis(~ (. - a)/b, name = "Divergence")) +
+  annotate("text", x = 1:16, y = -2, label = rep(c("W", "A", "B", "H"), 4)) +
+  annotate("text", c(2.5, 6.5, 10.5, 14.5), y = -5, label = c("1990","2000","2010","2017")) +
+  theme_minimal() +
+  theme(plot.margin = unit(c(1, 1, 4, 1), "lines"),
+        axis.title.x = element_blank(),
+        axis.text.x = element_blank()) +
+  labs(
+    fill = ""
+  ) +
+  scale_fill_hue(labels = c("Owners", "Residents")) +
+  theme(text=element_text(size=20))
+
+# Plot for Tenderloin 
+g3 <- total %>% 
+  filter(trtid10=="06075012401") %>% # Tenderloin
+  ungroup() %>% 
+  ggplot(aes(x = factor(race_int,
+                        level = c(
+                          "1990.White", "1990.Asian", "1990.Black", "1990.Hispanic",
+                          "2000.White", "2000.Asian", "2000.Black", "2000.Hispanic",
+                          "2010.White", "2010.Asian", "2010.Black", "2010.Hispanic",
+                          "2017.White", "2017.Asian", "2017.Black", "2017.Hispanic"
+                        )), y = share, fill = factor(type))) +
+  geom_bar(stat = "identity", position = position_dodge()) +
+  geom_line(aes(y = a + divergence*b, group = 1), color = "red") +
+  scale_y_continuous("Share", sec.axis = sec_axis(~ (. - a)/b, name = "Divergence")) +
+  annotate("text", x = 1:16, y = -2, label = rep(c("W", "A", "B", "H"), 4)) +
+  annotate("text", c(2.5, 6.5, 10.5, 14.5), y = -5, label = c("1990","2000","2010","2017")) +
+  theme_minimal() +
+  theme(plot.margin = unit(c(1, 1, 4, 1), "lines"),
+        axis.title.x = element_blank(),
+        axis.text.x = element_blank()) +
+  labs(
+    fill = ""
+  ) +
+  scale_fill_hue(labels = c("Owners", "Residents")) +
+  theme(text=element_text(size=20))
+
+# Arrange plots in a grid
+fig3 <- ggpubr::ggarrange(g1, g2, g3, ncol = 3, nrow = 1, common.legend = TRUE, 
+                           legend = "bottom",
+                           labels = c("Fillmore", "Union Square", "Tenderloin"),
+                           font.label = list(size = 20))
+
+
+```
+
 
