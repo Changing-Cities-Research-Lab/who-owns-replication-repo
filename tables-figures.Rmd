@@ -40,7 +40,7 @@ library(tigris)
 # Load Data
 
 ```{r data}
-df <- read_csv(here::here("df_full.csv")) 
+df <- read_csv(here::here("df_full.csv"))
 
 ```
 
@@ -206,7 +206,10 @@ table4_panel3 <- stargazer(r8,r4,r5,r6,
 ## Table 5: Divergence and Sales
 ```{r table5}
 
-df_sales <- read_csv(here::here("df_sales.csv")) 
+df_sales <- read_csv(here::here("df_sales.csv")) %>% 
+  left_join(.,scaled %>% select(trtid10,year,divergence),by=c("trtid10","year")) %>% 
+  group_by(year) %>% 
+  mutate(across(c("divergence","co_ethnic","minority_minority","minority_white","white_minority","white_white"), ~ as.numeric(scale(.))))
 
 m1 <- plm(divergence ~ co_ethnic + white_minority + minority_white + minority_minority + n_sales + pnhblk + phisp + pasian + pop + pown + pvac + p30old + INDIVIDUAL, data = df_sales, index = c("trtid10", "year_num"),
           model = "fd")
